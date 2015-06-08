@@ -1,5 +1,5 @@
 Changes for SQL::Translator
-
+ * Add support for add_field in SQL::Translator::Producer::SQLServer
  * Add support for monotonically increasing SQLite autoincs (GH#47)
  * Declare dependencies in deterministic order (RT#102859)
 

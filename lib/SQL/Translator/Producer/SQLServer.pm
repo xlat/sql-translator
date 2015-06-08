@@ -3,12 +3,26 @@ package SQL::Translator::Producer::SQLServer;
 use strict;
 use warnings;
 our ( $DEBUG, $WARN );
-our $VERSION = '1.59';
+our $VERSION = '1.59.1';
 $DEBUG = 1 unless defined $DEBUG;
 
 use SQL::Translator::Schema::Constants;
-use SQL::Translator::Utils qw(debug header_comment);
+use SQL::Translator::Utils qw(debug header_comment normalize_quote_options);
 use SQL::Translator::Generator::DDL::SQLServer;
+
+{
+  my ($quoting_generator, $nonquoting_generator);
+  sub _generator {
+    my $options = shift;
+    return $options->{generator} if exists $options->{generator};
+
+    return normalize_quote_options($options)
+      ? $quoting_generator ||= SQL::Translator::Generator::DDL::SQLServer->new
+      : $nonquoting_generator ||= SQL::Translator::Generator::DDL::SQLServer->new(
+        quote_chars => [],
+      );
+  }
+}
 
 sub produce {
   my $translator = shift;
@@ -17,6 +31,16 @@ sub produce {
     add_drop_table => $translator->add_drop_table,
   )->schema($translator->schema)
 }
+
+sub alter_table { () } # Noop
+
+sub add_field {
+  my ($field) = @_;
+
+  return sprintf("ALTER TABLE %s ADD %s",
+      _generator()->quote($field->table->name), _generator()->field($field))
+}
+
 
 1;
 
