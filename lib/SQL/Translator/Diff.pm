@@ -232,6 +232,9 @@ sub produce_diff_sql {
           $self->producer_args
         );
       }
+      if(my $batch_alter_end = $producer_class->can('batch_alter_table_end')){
+        push @diffs, $batch_alter_end->(\@diffs, $self->producer_args);
+      }
     } else {
 
       # If we have any table renames we need to do those first;

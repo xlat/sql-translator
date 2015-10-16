@@ -53,19 +53,35 @@ sub field {
       $self->field_default($field),
 }
 
+sub field_type_size {
+   my ($self, $field) = @_;
+
+   if($field->size && !$self->sizeless_types->{$field->data_type}){
+      my $size = $field->size;
+      if(($field->data_type eq 'nvarchar' && $size > 4000) ||
+         ($field->data_type eq 'varchar'  && $size > 8000) ){
+         $size = 'MAX';
+      }
+      return '(' . $size . ')';
+   }
+   return '';
+}
+
 sub field_autoinc { ( $_[1]->is_auto_increment ? 'IDENTITY' : () ) }
 
 sub primary_key_constraint {
-  'CONSTRAINT ' .
-    $_[0]->quote($_[1]->name || $_[1]->table->name . '_pk') .
+   my $name = $_[0]->quote($_[1]->name || $_[1]->table->name . '_pk');
+   $name =~ s/^.*\.//;
+  'CONSTRAINT ' . $name .
     ' PRIMARY KEY (' .
     join( ', ', map $_[0]->quote($_), $_[1]->fields ) .
     ')'
 }
 
 sub index {
-  'CREATE INDEX ' .
-   $_[0]->quote($_[1]->name || $_[1]->table->name . '_idx') .
+   my $name = $_[0]->quote($_[1]->name || $_[1]->table->name . '_idx');
+   $name =~ s/^.*\.//;
+  'CREATE INDEX ' . $name .
    ' ON ' . $_[0]->quote($_[1]->table->name) .
    ' (' . join( ', ', map $_[0]->quote($_), $_[1]->fields ) . ');'
 }
@@ -80,7 +96,9 @@ sub unique_constraint_single {
 
 sub unique_constraint_name {
   my ($self, $constraint) = @_;
-  $self->quote($constraint->name || $constraint->table->name . '_uc' )
+  my $name = $self->quote($constraint->name || $constraint->table->name . '_uc' );
+  $name =~ s/^.*\.//;
+  $name;
 }
 
 sub unique_constraint_multiple {
@@ -107,9 +125,11 @@ sub foreign_key_constraint {
     undef $_ if $_ eq 'RESTRICT'
   }
 
+   my $name = $self->quote($constraint->name || $constraint->table->name . '_fk');
+   $name =~ s/^.*\.//;
+
   'ALTER TABLE ' . $self->quote($constraint->table->name) .
-   ' ADD CONSTRAINT ' .
-   $self->quote($constraint->name || $constraint->table->name . '_fk') .
+   ' ADD CONSTRAINT ' . $name  .
    ' FOREIGN KEY' .
    ' (' . join( ', ', map $self->quote($_), $constraint->fields ) . ') REFERENCES '.
    $self->quote($constraint->reference_table) .
