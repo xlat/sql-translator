@@ -41,6 +41,19 @@ sub add_field {
       _generator()->quote($field->table->name), _generator()->field($field))
 }
 
+sub drop_field{
+    my ($old_field, $options) = @_;
+
+    my $generator  = _generator($options);
+    my $table_name = $generator->quote($old_field->table->name);
+
+    my $out = sprintf('ALTER TABLE %s DROP COLUMN %s',
+                      $table_name,
+                      $generator->quote($old_field->name));
+
+    return $out;
+
+}
 
 1;
 

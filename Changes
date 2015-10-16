@@ -1,5 +1,8 @@
 Changes for SQL::Translator
+ * fix constraints and indices naming + datatypes size=MAX in SQL::Translator::Generator::DDL::SQLServer
+ * Add support for drop_field in SQL::Translator::Producer::SQLServer
  * Add support for add_field in SQL::Translator::Producer::SQLServer
+ 
  * Add support for monotonically increasing SQLite autoincs (GH#47)
  * Declare dependencies in deterministic order (RT#102859)
 

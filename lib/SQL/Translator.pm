@@ -3,7 +3,7 @@ package SQL::Translator;
 use Moo;
 our ( $DEFAULT_SUB, $DEBUG, $ERROR );
 
-our $VERSION  = '0.11021.1';
+our $VERSION  = '0.11021.2';
 $DEBUG    = 0 unless defined $DEBUG;
 $ERROR    = "";
 
