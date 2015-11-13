@@ -266,7 +266,7 @@ sub alter_field
     PROPERTY:
     for(qw(is_auto_increment is_primary_key size is_nullable data_type order comments default_value)){
       if(cmp_prop($from_field,$to_field,$_)){
-        debug("alter_filed $table_name.$from_name: $_ changed".
+        debug("alter_field $table_name.$from_name: $_ changed".
               " from ". normalize_prop($from_field->$_()).
               " to "  . normalize_prop($to_field  ->$_()));
         if(/order|comments|is_primary_key/){
@@ -284,13 +284,14 @@ sub alter_field
       
       #1) rename $from_field->name as 'Tmp'.$from_to->name
       my $to_drop_column = $from_field->name;
-      if($from_field->name eq $to_field->name){
+      if($from_name eq $to_name){
         #TODO: look for possible colision of existing column
         $to_drop_column .= '#';
       }      
       push @out, qq{EXECUTE sp_rename N'$table_name.$from_name', N'$to_drop_column', 'COLUMN'};
+      $to_drop_column = $generator->quote($to_drop_column);
       #2) create $to_field->name
-      push @out, qq{ALTER TABLE $table_name ADD } . create_field($to_field, $options);
+      push @out, qq{ALTER TABLE $table_name ADD } . create_field($to_field, $options, { force_default_on_not_null => 1 });
       #3) copy (& cast if required) data
       push @out, qq{SET IDENTITY_INSERT $table_name ON}
         if $to_field->is_auto_increment;
@@ -306,7 +307,7 @@ sub alter_field
       #4) drop Tmp column
       push @out, qq{ALTER TABLE $table_name DROP COLUMN $to_drop_column};
     }
-    elsif($from_field->name ne $to_field->name){
+    elsif($from_name ne $to_name){
       #only rename field
       push @out, qq{EXECUTE sp_rename N'$table_name.$from_name', N'$to_name', 'COLUMN'};
     }
@@ -319,32 +320,37 @@ sub alter_drop_constraint{
 
     my $generator = _generator($options);
     my $table_name = $c->table->name;
-    #$DB::single = 1 if $table_name =~ /invoice/;
-    #my @fk_constraints;
-    #TABLE:
-    #for my $table (@{ $c->table->schema->get_tables // [] }){
-    #  next TABLE if $table->name eq $table_name;
-    #  push @fk_constraints,
-    #        #TODO: must check for $table_name related FK that are not already dropped,
-    #        # so we should DROP them, then append FK re-create in the $options->{stmts_queue}
-    #        grep{ $_->reference_table eq $table_name }
-    #        @{$table->get_constraints // []};
-    #}
+    $DB::single = 1 if $table_name =~ /parameter$/ and $c->type eq PRIMARY_KEY;
+    my @fk_constraints;
+    TABLE:
+    for my $table (@{ $c->table->schema->get_tables // [] }){
+      next TABLE if $table->name eq $table_name;
+      CONSTRAINT:
+      for(@{$table->get_constraints // []}){
+            next CONSTRAINT unless $_->reference_table eq $table_name;
+            next CONSTRAINT if exists $options->{dropped}{$_->name};
+              #must check for $table_name related FK that are not already dropped,
+              # so we should DROP them, then append FK re-create in the $options->{stmts_queue}
+              #then mark it as dropped.
+            $options->{dropped}{$_->name}++;
+            push @fk_constraints, $_;
+      }
+    }
     
     $table_name = $generator->quote($table_name);
     
     my @out;
-    #if(@fk_constraints){
-    #  push @{$options->{stmts_queue}},  batch_alter_table_statements(
-    #          { alter_create_constraint => [ @fk_constraints ] },
-    #          $options );
-    #  push @out, batch_alter_table_statements(
-    #          { alter_drop_constraint => [ @fk_constraints ] },
-    #          $options );
-    #}
+    if(@fk_constraints){
+      push @{$options->{stmts_queue}},  batch_alter_table_statements(
+              { alter_create_constraint => [ @fk_constraints ] },
+              $options );
+      push @out, batch_alter_table_statements(
+              { alter_drop_constraint => [ @fk_constraints ] },
+              $options );
+    }
     
     if($c->type eq PRIMARY_KEY) {
-      @out = <<DROP_PK;
+      push @out, <<DROP_PK;
 --Drop PK for table $table_name
 /*KEEP BEGIN*/BEGIN
 	DECLARE \@SQL VARCHAR(MAX)
@@ -354,12 +360,11 @@ END
 DROP_PK
     }
     else {
-        @out = ('ALTER','TABLE',$table_name,'DROP');
         my $c_name = $generator->quote($c->name);
         $c_name =~ s/^.*\.//;
-        push @out, $c_name;
+        push @out, join(' ', 'ALTER','TABLE',$table_name,'DROP', $c_name);
     }
-    return join(' ',@out);
+    return join(";\n",@out);
 }
 
 sub alter_create_constraint{
@@ -586,7 +591,7 @@ sub drop_table {
 }
 
 sub create_field{
-    my ($field, $options) = @_;
+    my ($field, $options, $args) = @_;
 
     my $generator = _generator($options);
 
@@ -637,6 +642,18 @@ sub create_field{
         'NULL'       => \'NULL',
       ],
     );
+    
+    if( !$field->is_nullable
+       and !defined($field->default_value)
+       and $args->{force_default_on_not_null}){
+      $field_def .= ' DEFAULT ';
+      if($data_type =~ /char|text|binary|image/){
+        $field_def .= "''";
+      }
+      else{
+        $field_def .= '0';
+      }
+    }
 
     if ( my $comments = $field->comments ) {
         #MSSQL could not add comment while creating column, but in a separate statement:
