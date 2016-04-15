@@ -242,6 +242,12 @@ sub drop_field{
     my $generator  = _generator($options);
     my $table_name = $generator->quote($old_field->table->name);
 
+    #TODO:
+    # Error => ALTER TABLE DROP COLUMN **column name** failed because one or more objects access this column.
+    # This can append when trying to drop a column with a default value (eg: getdate() ) that
+    # is handled in the form of a constraint.
+    #http://stackoverflow.com/questions/8641954/how-to-drop-column-with-constraint
+    
     my $out = sprintf('ALTER TABLE %s DROP COLUMN %s',
                       $table_name,
                       $generator->quote($old_field->name));
@@ -313,6 +319,53 @@ sub alter_field
     }
 
     return join("\n", map{ "$_;" } @out) // '';
+}
+
+sub alter_drop_index
+{
+    my ($index, $options) = @_;
+    my $generator  = _generator($options);
+    my $table_name = $index->table->name;
+    my $index_name = $index->name || die(" Can't drop unnamed index on table $table_name with fields:", join ',', $index->fields);
+    $index_name =~ s/^[^.]+\.//g;
+
+    return join( ' ',
+                 'DROP',
+                 'INDEX',
+                 $generator->quote($index_name),
+                 'ON',
+                 $generator->quote($table_name),
+                 );
+
+}
+
+sub alter_create_index{
+    return 'CREATE ' . create_index(@_);
+}
+
+sub create_index{
+    my ( $index, $options ) = @_;
+    my $generator = _generator($options);
+    my $table_name = $index->table->name;
+    my $index_name = $index->name
+        ? truncate_id_uniquely(
+                $index->name,
+                $options->{max_id_length} || $DEFAULT_MAX_ID_LENGTH
+          )
+        : '';
+    $index_name =~ s/^[^.]+\.//g;
+
+    return join(
+        ' ',
+        map { $_ || () }
+        lc $index->type eq 'normal' ? 'INDEX' : $index->type . ' INDEX',
+        $generator->quote($index_name),
+        'ON', 
+        $generator->quote($table_name),
+        '(' . join( ', ', map { $generator->quote($_) } $index->fields ) . ')'
+        #TODO: add ASC/DESC field order
+        #TODO: add WITH (DROP_EXISTING = ON)
+    );
 }
 
 sub alter_drop_constraint{

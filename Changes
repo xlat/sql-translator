@@ -1,4 +1,7 @@
 Changes for SQL::Translator
+
+ * Add support for alter_create_index in SQL::Translator::Producer::SQLServer
+ * Add support for create_index in SQL::Translator::Producer::SQLServer
  * Extend SQL::Translator::Producer(s) with "batch_alter_table_end" in SQL::Translator::Diff
  * In SQL::Translator::Producer::SQLServer, Add supports for :
    - alter_field

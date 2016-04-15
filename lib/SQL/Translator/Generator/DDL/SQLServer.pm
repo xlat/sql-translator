@@ -58,8 +58,8 @@ sub field_type_size {
 
    if($field->size && !$self->sizeless_types->{$field->data_type}){
       my $size = $field->size;
-      if(($field->data_type eq 'nvarchar' && $size > 4000) ||
-         ($field->data_type eq 'varchar'  && $size > 8000) ){
+      if(($field->data_type eq 'nvarchar'  && $size > 4000) ||
+         ($field->data_type eq 'varchar'   && $size > 8000) ){
          $size = 'MAX';
       }
       return '(' . $size . ')';
